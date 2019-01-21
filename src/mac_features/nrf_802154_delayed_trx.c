@@ -84,21 +84,6 @@ void dly_op_state_set(rsch_dly_ts_id_t dly_ts_id, delayed_trx_op_state_t dly_op_
     assert(dly_ts_id < RSCH_DLY_TS_NUM);
     assert(dly_op_state < DELAYED_TRX_OP_STATE_NB);
 
-    switch(m_dly_op_state[dly_ts_id])
-    {
-        case DELAYED_TRX_OP_STATE_STOPPED:
-            assert(m_dly_op_state[dly_ts_id] != DELAYED_TRX_OP_STATE_STOPPED);
-            break;
-
-        case DELAYED_TRX_OP_STATE_PENDING:
-            assert(m_dly_op_state[dly_ts_id] == DELAYED_TRX_OP_STATE_STOPPED);
-            break;
-
-        case DELAYED_TRX_OP_STATE_ONGOING:
-            assert(m_dly_op_state[dly_ts_id] == DELAYED_TRX_OP_STATE_PENDING);
-            break;
-    }
-
     m_dly_op_state[dly_ts_id] = dly_op_state;
 }
 
@@ -143,6 +128,14 @@ static void notify_rx_timeslot_denied(bool result)
 }
 
 /**
+ * Notify MAC layer that delayed operation was aborted.
+ */
+static void notify_rx_aborted(void)
+{
+    nrf_802154_notify_receive_failed(NRF_802154_RX_ERROR_DELAYED_ABORTED);
+}
+
+/**
  * Notify MAC layer that no frame was received before timeout.
  *
  * @param[in]  p_context  Not used.
@@ -169,24 +162,19 @@ static void nrf_802154_rsch_delayed_tx_timeslot_started(void)
 
     if (result)
     {
-        dly_op_state_set(RSCH_DLY_TX, DELAYED_TRX_OP_STATE_ONGOING);
-
         result = nrf_802154_request_transmit(NRF_802154_TERM_802154,
                                              REQ_ORIG_DELAYED_TRX,
                                              mp_tx_psdu,
                                              m_tx_cca,
                                              true,
                                              notify_tx_timeslot_denied);
-        if(!result)
-        {
-            dly_op_state_set(RSCH_DLY_TX, DELAYED_TRX_OP_STATE_STOPPED);
-        }
+        (void)result;
     }
     else
     {
         notify_tx_timeslot_denied(result);
-        dly_op_state_set(RSCH_DLY_TX, DELAYED_TRX_OP_STATE_STOPPED);
     }
+    dly_op_state_set(RSCH_DLY_TX, DELAYED_TRX_OP_STATE_STOPPED);
 }
 
 /**
@@ -203,14 +191,14 @@ static void nrf_802154_rsch_delayed_rx_timeslot_started(void)
 
     if (result)
     {
-        dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_ONGOING);
-
         result = nrf_802154_request_receive(NRF_802154_TERM_802154,
                                             REQ_ORIG_DELAYED_TRX,
                                             notify_rx_timeslot_denied,
                                             true);
         if (result)
         {
+            dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_ONGOING);
+
             m_timeout_timer.t0 = nrf_802154_timer_sched_time_get();
 
             nrf_802154_timer_sched_add(&m_timeout_timer, true);
@@ -220,10 +208,10 @@ static void nrf_802154_rsch_delayed_rx_timeslot_started(void)
             dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_STOPPED);
         }
     }
-    else
+    if (result)
     {
-        notify_rx_timeslot_denied(result);
         dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_STOPPED);
+        notify_rx_timeslot_denied(result);
     }
 }
 
@@ -256,7 +244,10 @@ bool nrf_802154_delayed_trx_transmit(const uint8_t * p_data,
                                                      cca,
                                                      p_data[ACK_REQUEST_OFFSET] & ACK_REQUEST_BIT);
 
-        dly_op_state_set(RSCH_DLY_TX, DELAYED_TRX_OP_STATE_ONGOING);
+        // Set PENDING state before timeslot request, in case timeslot starts immediatly
+        // and interrupts current function execution.
+        dly_op_state_set(RSCH_DLY_TX, DELAYED_TRX_OP_STATE_PENDING);
+
         result = nrf_802154_rsch_delayed_timeslot_request(t0,
                                                           dt,
                                                           timeslot_length,
@@ -265,7 +256,6 @@ bool nrf_802154_delayed_trx_transmit(const uint8_t * p_data,
 
         if (!result)
         {
-            notify_tx_timeslot_denied(result);
             dly_op_state_set(RSCH_DLY_TX, DELAYED_TRX_OP_STATE_STOPPED);
         }
     }
@@ -287,7 +277,10 @@ bool nrf_802154_delayed_trx_receive(uint32_t t0,
         dt -= RX_SETUP_TIME;
         dt -= RX_RAMP_UP_TIME;
 
-        dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_ONGOING);
+        // Set PENDING state before timeslot request, in case timeslot starts immediatly
+        // and interrupts current function execution.
+        dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_PENDING);
+
         result = nrf_802154_rsch_delayed_timeslot_request(t0,
                                                           dt,
                                                           timeout +
@@ -306,7 +299,6 @@ bool nrf_802154_delayed_trx_receive(uint32_t t0,
         }
         else
         {
-            notify_rx_timeslot_denied(result);
             dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_STOPPED);
         }
     }
@@ -353,12 +345,19 @@ bool nrf_802154_delayed_trx_abort(nrf_802154_term_t term_lvl, req_originator_t r
     bool result = true;
     rsch_dly_ts_id_t ts_id;
 
-    for (ts_id = 0; ts_id < RSCH_DLY_TS_NUM; ts_id++)
+    if (dly_op_state_get(RSCH_DLY_RX) == DELAYED_TRX_OP_STATE_ONGOING)
+     {
+        // No ongoing procedures, just return true.
+    }
+    else if ((REQ_ORIG_HIGHER_LAYER == req_orig) || (term_lvl >= NRF_802154_TERM_802154))
     {
-        if (dly_op_state_get(ts_id) == DELAYED_TRX_OP_STATE_ONGOING)
-        {
-            result = false;
-        }
+        dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_STOPPED);
+        nrf_802154_timer_sched_remove(&m_timeout_timer);
+        notify_rx_aborted();
+    }
+    else
+    {
+        result = false;
     }
 
     return result;
@@ -366,8 +365,10 @@ bool nrf_802154_delayed_trx_abort(nrf_802154_term_t term_lvl, req_originator_t r
 
 void nrf_802154_delayed_trx_rx_started_hook(void)
 {
-    if (dly_op_state_get(RSCH_DLY_RX) == DELAYED_TRX_OP_STATE_PENDING)
+    if (dly_op_state_get(RSCH_DLY_RX) == DELAYED_TRX_OP_STATE_ONGOING)
     {
+        // @TODO protect against infinite extensions - allow only one timer extension
+        // Could be done by new state??? to be analyzed
         if (nrf_802154_timer_sched_remaining_time_get(&m_timeout_timer)
             < nrf_802154_rx_duration_get(MAX_PACKET_SIZE, true))
         {

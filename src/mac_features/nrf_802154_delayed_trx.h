@@ -58,9 +58,6 @@
  *       be timed out by the next higher layer or the ACK timeout module. The ACK timeout timer
  *       shall start when the @ref nrf_802154_tx_started function is called.
  *
-  * @note To enter sleep when delayed TX operation is in ONGOING state, the operation must
- *       be cancelled before sleep request. Otherwise the sleep request will fail.
- *
  * @param[in]  p_data   Pointer to array containing data to transmit (PHR + PSDU).
  * @param[in]  cca      If the driver should perform CCA procedure before transmission.
  * @param[in]  t0       Base of delay time [us].
@@ -84,9 +81,6 @@ bool nrf_802154_delayed_trx_transmit(const uint8_t * p_data,
  * @ref nrf_802154_received is called. If the request is rejected due to denied timeslot request
  * or reception timeout expired the @ref nrf_802154_receive_failed function is called.
  *
- * @note To enter sleep when delayed RX operation is in ONGOING state, the operation must
- *       be cancelled before sleep request. Otherwise the sleep request will fail.
- *
  * @param[in]  t0       Base of delay time [us].
  * @param[in]  dt       Delta of delay time from @p t0 [us].
  * @param[in]  timeout  Reception timeout (counted from @p t0 + @p dt) [us].
@@ -98,16 +92,14 @@ bool nrf_802154_delayed_trx_receive(uint32_t t0,
                                     uint8_t  channel);
 
 /**
- * @brief Blocks termination if any delayed operation is ONGOING state.
+ * @brief Aborts ONGOING delayed receive procedure.
  *
  * @param[in]  term_lvl  Termination level set by request aborting ongoing operation.
  * @param[in]  req_orig  Module that originates this request.
  *
- * If any delayed operation is ongoing, sleep request will fail. Delayed operation should be
- * cancelled prior to sleep request to make it successful.
+ * If delayed transmit/receive procedure are not running during call, this function does nothing.
  *
- * @retval  true   no ongoing delayed operations.
- * @retval  false  there is an ongoing delayed operation.
+ * @retval  true   transmit/receive procedures have been stopped.
  */
 bool nrf_802154_delayed_trx_abort(nrf_802154_term_t term_lvl, req_originator_t req_orig);
 
