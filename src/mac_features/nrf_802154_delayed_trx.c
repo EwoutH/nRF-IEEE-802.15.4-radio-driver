@@ -131,16 +131,15 @@ static bool dly_op_request(uint32_t         t0,
     dly_op_state_set(dly_ts_id, DELAYED_TRX_OP_STATE_PENDING);
 
     result = nrf_802154_rsch_delayed_timeslot_request(t0,
-                                                        dt,
-                                                        length,
-                                                        RSCH_PRIO_MAX,
-                                                        dly_ts_id);
+                                                      dt,
+                                                      length,
+                                                      RSCH_PRIO_MAX,
+                                                      dly_ts_id);
 
     if (!result)
     {
         dly_op_state_set(dly_ts_id, DELAYED_TRX_OP_STATE_STOPPED);
     }
-
 
     return result;
 }
@@ -281,9 +280,9 @@ static void rx_timeslot_started_callout(void)
     if (result)
     {
         (void)nrf_802154_request_receive(NRF_802154_TERM_802154,
-                                            REQ_ORIG_DELAYED_TRX,
-                                            rx_timeslot_started_callback,
-                                            true);
+                                         REQ_ORIG_DELAYED_TRX,
+                                         rx_timeslot_started_callback,
+                                         true);
     }
     else
     {
@@ -313,7 +312,7 @@ bool nrf_802154_delayed_trx_transmit(const uint8_t * p_data,
             dt -= nrf_802154_cca_before_tx_duration_get();
         }
 
-        acq = p_data[ACK_REQUEST_OFFSET] & ACK_REQUEST_BIT;
+        acq             = p_data[ACK_REQUEST_OFFSET] & ACK_REQUEST_BIT;
         timeslot_length = nrf_802154_tx_duration_get(p_data[0], cca, acq);
 
         mp_tx_psdu   = p_data;
