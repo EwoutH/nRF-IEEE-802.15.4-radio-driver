@@ -87,7 +87,7 @@ static delayed_trx_op_state_t m_dly_op_state[RSCH_DLY_TS_NUM];
  * @param[in]  dly_ts_id    Delayed timeslot ID.
  * @param[in]  dly_op_state Delayed operation state.
  */
-void dly_op_state_set(rsch_dly_ts_id_t dly_ts_id, delayed_trx_op_state_t dly_op_state)
+static void dly_op_state_set(rsch_dly_ts_id_t dly_ts_id, delayed_trx_op_state_t dly_op_state)
 {
     assert(dly_ts_id < RSCH_DLY_TS_NUM);
     assert(dly_op_state < DELAYED_TRX_OP_STATE_NB);
@@ -102,7 +102,7 @@ void dly_op_state_set(rsch_dly_ts_id_t dly_ts_id, delayed_trx_op_state_t dly_op_
  *
  * @retval     State of delayed operation.
  */
-delayed_trx_op_state_t dly_op_state_get(rsch_dly_ts_id_t dly_ts_id)
+static delayed_trx_op_state_t dly_op_state_get(rsch_dly_ts_id_t dly_ts_id)
 {
     assert(dly_ts_id < RSCH_DLY_TS_NUM);
 
@@ -298,7 +298,7 @@ bool nrf_802154_delayed_trx_transmit(const uint8_t * p_data,
 {
     bool     result;
     uint16_t timeslot_length;
-    bool     acq;
+    bool     ack;
 
     result = dly_op_state_get(RSCH_DLY_TX) == DELAYED_TRX_OP_STATE_STOPPED;
 
@@ -312,8 +312,8 @@ bool nrf_802154_delayed_trx_transmit(const uint8_t * p_data,
             dt -= nrf_802154_cca_before_tx_duration_get();
         }
 
-        acq             = p_data[ACK_REQUEST_OFFSET] & ACK_REQUEST_BIT;
-        timeslot_length = nrf_802154_tx_duration_get(p_data[0], cca, acq);
+        ack             = p_data[ACK_REQUEST_OFFSET] & ACK_REQUEST_BIT;
+        timeslot_length = nrf_802154_tx_duration_get(p_data[0], cca, ack);
 
         mp_tx_psdu   = p_data;
         m_tx_cca     = cca;
@@ -398,7 +398,7 @@ bool nrf_802154_delayed_trx_abort(nrf_802154_term_t term_lvl, req_originator_t r
 
     if (dly_op_state_get(RSCH_DLY_RX) == DELAYED_TRX_OP_STATE_ONGOING)
     {
-        if ((REQ_ORIG_HIGHER_LAYER == req_orig) || (term_lvl >= NRF_802154_TERM_802154))
+        if (term_lvl >= NRF_802154_TERM_802154)
         {
             dly_op_state_set(RSCH_DLY_RX, DELAYED_TRX_OP_STATE_STOPPED);
             nrf_802154_timer_sched_remove(&m_timeout_timer);
