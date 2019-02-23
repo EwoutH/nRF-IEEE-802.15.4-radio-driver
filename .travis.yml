@@ -3,8 +3,8 @@ dist: xenial
 
 addons:
   apt:
-    update: true
-    packages: cmake
+   - update: true
+   - packages: cmake
 
 jobs:
   include:
