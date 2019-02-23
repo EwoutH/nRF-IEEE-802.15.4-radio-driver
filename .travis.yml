@@ -8,8 +8,14 @@ addons:
 
 jobs:
   include:
-    - name: Build
-    - name: Style
+    - name: Build & test
+      script:
+       - mkdir build
+       - cd build
+       - cmake .. -DCMAKE_BUILD_TYPE=Release
+       - make -j
+       - make -j test
+    - name: Build & style check
       install:
        - wget https://github.com/uncrustify/uncrustify/archive/uncrustify-0.66.1.tar.gz
        - tar xzf uncrustify-0.66.1.tar.gz
