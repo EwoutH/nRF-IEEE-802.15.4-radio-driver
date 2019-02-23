@@ -1,21 +1,13 @@
 language: C
 dist: xenial
 
-addons:
-  apt:
-    update: true
-    packages: cmake
-
 jobs:
   include:
-    - name: Build & test
-      script:
-       - mkdir build
-       - cd build
-       - cmake .. -DCMAKE_BUILD_TYPE=Release
-       - make -j
-       - make -j test
-    - name: Build & style check
+    - name: Style check
+      addons:
+       apt:
+         update: true
+         packages: cmake
       install:
        - wget https://github.com/uncrustify/uncrustify/archive/uncrustify-0.66.1.tar.gz
        - tar xzf uncrustify-0.66.1.tar.gz
