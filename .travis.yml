@@ -3,8 +3,8 @@ dist: xenial
 
 addons:
   apt:
-   - update: true
-   - packages: cmake
+    update: true
+    packages: cmake
 
 jobs:
   include:
@@ -27,4 +27,4 @@ jobs:
        - export PATH=$PWD:$PATH
        - cd ../../
        - uncrustify --version
-     script: ./scripts/pretty.sh check
+      script: ./scripts/pretty.sh check
